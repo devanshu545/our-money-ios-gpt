@@ -59,11 +59,14 @@ jobs:
           xcodebuild -project OurMoney.xcodeproj -scheme OurMoney -configuration Release -sdk iphoneos \
             -showBuildSettings 2>/dev/null | grep -E 'PRODUCT_NAME|FULL_PRODUCT_NAME|WRAPPER_EXTENSION|PRODUCT_BUNDLE_IDENTIFIER|Xcode|SDK version'
 
-      - name: Run unit tests (iPhone 15 simulator)
+      - name: Run unit tests (iPhone simulator)
         run: |
           set -o pipefail
+          SIM=$(xcrun simctl list devices available | grep -E 'iPhone' | head -1 | sed -E 's/^[[:space:]]*(.*) \([A-F0-9-]{36}\).*/\1/')
+          if [ -z "$SIM" ]; then echo "No iPhone simulator available"; xcrun simctl list devices available; exit 1; fi
+          echo "Using simulator: $SIM"
           xcodebuild -project OurMoney.xcodeproj -scheme OurMoney -configuration Debug \
-            -destination 'platform=iOS Simulator,name=iPhone 15' \
+            -destination "platform=iOS Simulator,name=$SIM" \
             -derivedDataPath build/DerivedData test | xcbeautify
 
       - name: Archive (Release, iphoneos, unsigned)
