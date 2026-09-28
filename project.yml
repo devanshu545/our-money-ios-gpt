@@ -71,8 +71,6 @@ targets:
         product: FirebaseAuth
       - package: Firebase
         product: FirebaseFirestore
-      - package: Firebase
-        product: FirebaseFirestoreSwift
       - package: GoogleSignIn
         product: GoogleSignIn
   OurMoneyTests:
