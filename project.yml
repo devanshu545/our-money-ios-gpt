@@ -28,8 +28,12 @@ targets:
       path: OurMoney/Info.plist
       properties:
         CFBundleDisplayName: OurMoney
-        CFBundleShortVersionString: 1.0
-        CFBundleVersion: 1
+        # Quoted deliberately: unquoted 1.0/1 parse as float/int and XcodeGen emits
+        # <real>/<integer> in Info.plist, which crashes XCTest host launch
+        # (doesNotRecognizeSelector in CFBundleGetMainBundle) and fails
+        # App Store validation. Bundle version keys must be strings.
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
         UILaunchScreen:
           UIColorName: LaunchBackground
         UIStatusBarStyle: UIStatusBarStyleLightContent
