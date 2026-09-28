@@ -69,28 +69,39 @@ jobs:
       - name: Launch probe — capture host app startup console
         if: failure()
         run: |
-          SIM=$(xcrun simctl list devices available | grep -E 'iPhone' | head -1 | sed -E 's/^[[:space:]]*(.*) \([A-F0-9-]{36}\).*/\1/')
           UDID=$(xcrun simctl list devices available | grep -E 'iPhone' | head -1 | grep -oE '[A-F0-9-]{36}')
-          echo "Probing launch on: $SIM ($UDID)"
+          echo "Probing launch on UDID: $UDID"
           xcrun simctl boot "$UDID" 2>/dev/null || true
+          sleep 10
           APP="build/DerivedData/Build/Products/Debug-iphonesimulator/OurMoney.app"
           BID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
           echo "--- bundle id: $BID ---"
           LOG=$(mktemp /tmp/launch-probe.XXXXXX.log)
-          xcrun simctl launch --console-pty "$UDID" "$BID" >"$LOG" 2>&1 &
-          LAUNCH_PID=$!
-          sleep 25
-          kill $LAUNCH_PID 2>/dev/null || true
-          echo "===== HOST APP STARTUP CONSOLE ====="
+          OSLOG=$(mktemp /tmp/oslog.XXXXXX.log)
+          xcrun simctl spawn "$UDID" log stream --style compact --predicate 'processImagePath CONTAINS "OurMoney"' >"$OSLOG" 2>&1 &
+          OSLOG_PID=$!
+          sleep 3
+          xcrun simctl launch "$UDID" "$BID" || true
+          sleep 20
+          echo "--- process state after 20s ---"
+          xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -i ourmoney || echo "OurMoney process NOT running (crashed on plain launch)"
+          kill $OSLOG_PID 2>/dev/null || true
+          echo "===== OS_LOG DURING LAUNCH ====="
+          cat "$OSLOG" || true
+          echo "===== PLAIN LAUNCH STDOUT ====="
           cat "$LOG" || true
-          echo "===== END HOST APP STARTUP CONSOLE ====="
-          echo "===== CRASH REPORTS ====="
+          echo "===== ALL OURMONEY CRASH REPORTS ====="
           CRASH_DIR="$HOME/Library/Logs/DiagnosticReports"
-          find "$CRASH_DIR" -name 'OurMoney*' -newer "$LOG" 2>/dev/null | head -3 | while read -r f; do
+          ls -t "$CRASH_DIR" 2>/dev/null | grep -i ourmoney | head -3 | while read -r f; do
             echo "--- $f ---"
-            sed -n '1,80p' "$f"
+            sed -n '1,120p' "$CRASH_DIR/$f"
           done
           echo "===== END CRASH REPORTS ====="
+          echo "===== XCRUN RESULT DETAILS ====="
+          XCR=$(ls -td build/DerivedData/Logs/Test/*.xcresult 2>/dev/null | head -1)
+          if [ -n "$XCR" ]; then
+            xcrun xcresulttool get test-results tests --path "$XCR" 2>/dev/null | head -100 || true
+          fi
 
       - name: Archive (Release, iphoneos, unsigned)
         run: |
