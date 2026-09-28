@@ -33,7 +33,7 @@ final class AuthManager: ObservableObject {
     private func handleAuthUser(_ firebaseUser: FirebaseAuth.User?) {
         userCancellable?.cancel(); userCancellable = nil; householdCancellable?.cancel(); householdCancellable = nil
         guard let firebaseUser else { state = .idle; return }; state = .loading
-        userCancellable = service.observeUser(uid: firebaseUser.uid) { [weak self] result in Task { @MainActor in guard let self else { return }; switch result { case .failure(let e): self.state = .error(e.localizedDescription); case .success(nil): self.state = .requiresName(uid: firebaseUser.uid); case .success(let user): self.routeUser(user) } } }
+        userCancellable = service.observeUser(uid: firebaseUser.uid) { [weak self] result in Task { @MainActor in guard let self else { return }; switch result { case .failure(let e): self.state = .error(e.localizedDescription); case .success(nil): self.state = .requiresName(uid: firebaseUser.uid); case .success(.some(let user)): self.routeUser(user) } } }
     }
     private func routeUser(_ user: User) {
         guard let householdId = user.householdId, !householdId.isEmpty else { state = .requiresPairing(user: user, household: nil, error: nil); return }
