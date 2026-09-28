@@ -17,17 +17,23 @@ final class AuthManager: ObservableObject {
 
     init() {
         // Firebase must be configured before any Firestore reference is created;
-        // Firestore.firestore() throws otherwise. Property initializers run before
-        // init bodies, so service creation is deferred until after configuration.
-        configureFirebase()
+        // Firestore.firestore() throws otherwise. Swift does not allow instance
+        // method calls before stored properties are initialized, so configuration
+        // runs as a static call first, then service creation.
+        Self.configureFirebaseIfNeeded()
         self.service = FirestoreService()
+        configureGoogle()
+        attachAuthListener()
+        if FirebaseApp.app() == nil {
+            state = .error("Firebase iOS configuration is missing. Register com.ourmoney.app in Firebase and add GoogleService-Info.plist.")
+        }
     }
     deinit { if let authHandle { Auth.auth().removeStateDidChangeListener(authHandle) } }
 
-    private func configureFirebase() {
-        guard FirebaseApp.app() == nil else { configureGoogle(); attachAuthListener(); return }
-        guard Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil else { state = .error("Firebase iOS configuration is missing. Register com.ourmoney.app in Firebase and add GoogleService-Info.plist."); return }
-        FirebaseApp.configure(); configureGoogle(); attachAuthListener()
+    private static func configureFirebaseIfNeeded() {
+        guard FirebaseApp.app() == nil,
+              Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil else { return }
+        FirebaseApp.configure()
     }
 
     private func configureGoogle() {
