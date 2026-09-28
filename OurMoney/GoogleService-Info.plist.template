@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      PLACEHOLDER ONLY — never shipped.
+      Replace with the real GoogleService-Info.plist downloaded from the Firebase
+      console for the iOS app with bundle ID com.ourmoney.app, or let
+      Scripts/prepare_config.sh generate it from CI secrets (FIREBASE_* vars).
+    -->
+    <key>PLACEHOLDER</key>
+    <string>REGISTER com.ourmoney.app AS AN IOS APP IN FIREBASE FIRST</string>
+</dict>
+</plist>

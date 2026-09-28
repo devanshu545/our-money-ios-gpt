@@ -1,0 +1,101 @@
+name: Build OurMoney iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Prepare Firebase + Google Sign-In configuration
+        env:
+          FIREBASE_PLIST_B64: ${{ secrets.FIREBASE_PLIST_B64 }}
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          GCM_SENDER_ID: ${{ secrets.GCM_SENDER_ID }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_STORAGE_BUCKET: ${{ secrets.FIREBASE_STORAGE_BUCKET }}
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          bash Scripts/prepare_config.sh \
+            "$FIREBASE_PLIST_B64" \
+            "$FIREBASE_API_KEY" \
+            "$GCM_SENDER_ID" \
+            "$FIREBASE_PROJECT_ID" \
+            "$FIREBASE_STORAGE_BUCKET" \
+            "$FIREBASE_APP_ID" \
+            "$GEMINI_API_KEY"
+
+      - name: Validate Firebase configuration
+        run: |
+          test -s OurMoney/GoogleService-Info.plist
+          PLIST_BID=$(/usr/libexec/PlistBuddy -c 'Print :BUNDLE_ID' OurMoney/GoogleService-Info.plist)
+          CLIENT_ID=$(/usr/libexec/PlistBuddy -c 'Print :CLIENT_ID' OurMoney/GoogleService-Info.plist)
+          echo "Firebase plist BUNDLE_ID: $PLIST_BID"
+          if [ "$PLIST_BID" != "com.ourmoney.app" ]; then
+            echo "::warning::GoogleService-Info.plist is registered for '$PLIST_BID', but the app bundle id is com.ourmoney.app. Firebase logs I-COR000008 and still initializes; register com.ourmoney.app as a new iOS app in the Firebase project and replace the plist for a perfect match."
+          fi
+          if [ -z "$CLIENT_ID" ]; then
+            echo "::warning::GoogleService-Info.plist has an empty CLIENT_ID; Google Sign-In will not be able to present the Google UI."
+          fi
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Show build settings
+        run: |
+          set -o pipefail
+          xcodebuild -project OurMoney.xcodeproj -scheme OurMoney -configuration Release -sdk iphoneos \
+            -showBuildSettings 2>/dev/null | grep -E 'PRODUCT_NAME|FULL_PRODUCT_NAME|WRAPPER_EXTENSION|PRODUCT_BUNDLE_IDENTIFIER|Xcode|SDK version'
+
+      - name: Run unit tests (iPhone 15 simulator)
+        run: |
+          set -o pipefail
+          xcodebuild -project OurMoney.xcodeproj -scheme OurMoney -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 15' \
+            -derivedDataPath build/DerivedData test | xcbeautify
+
+      - name: Archive (Release, iphoneos, unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild -project OurMoney.xcodeproj -scheme OurMoney -configuration Release -sdk iphoneos \
+            -archivePath build/OurMoney.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO archive | xcbeautify
+
+      - name: Verify archive contents
+        run: |
+          APP="build/OurMoney.xcarchive/Products/Applications/OurMoney.app"
+          test -d "$APP"
+          test -f "$APP/Info.plist"
+          BID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+          NAME=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Info.plist")
+          echo "Bundle identifier: $BID"
+          echo "Executable: $NAME"
+          test "$BID" = "com.ourmoney.app"
+          test "$NAME" = "OurMoney"
+          test -f "$APP/GoogleService-Info.plist"
+
+      - name: Package IPA
+        run: |
+          mkdir -p build/Payload
+          cp -R build/OurMoney.xcarchive/Products/Applications/OurMoney.app build/Payload/OurMoney.app
+          cd build
+          zip -qry OurMoney-unsigned.ipa Payload
+          ls -lh OurMoney-unsigned.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OurMoney-unsigned-IPA
+          path: build/OurMoney-unsigned.ipa
+          if-no-files-found: error

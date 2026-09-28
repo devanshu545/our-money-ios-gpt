@@ -1,0 +1,102 @@
+name: OurMoney
+options:
+  bundleIdPrefix: com.ourmoney
+  deploymentTarget:
+    iOS: 17.0
+  developmentLanguage: en
+  createIntermediateGroups: true
+packages:
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk.git
+    from: 12.0.0
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS.git
+    from: 9.0.0
+settings:
+  base:
+    # No project-wide PRODUCT_NAME overrides: each target names its own product.
+    # The app target pins PRODUCT_NAME/FULL_PRODUCT_NAME/WRAPPER_EXTENSION below,
+    # guaranteeing exactly one application product: OurMoney.app.
+targets:
+  OurMoney:
+    type: application
+    platform: iOS
+    deploymentTarget: 17.0
+    sources:
+      - path: OurMoney
+    info:
+      path: OurMoney/Info.plist
+      properties:
+        CFBundleDisplayName: OurMoney
+        CFBundleShortVersionString: 1.0
+        CFBundleVersion: 1
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIStatusBarStyle: UIStatusBarStyleLightContent
+        UIUserInterfaceStyle: Dark
+        GIDClientID: $(GOOGLE_CLIENT_ID)
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Editor
+            CFBundleURLSchemes:
+              - $(REVERSED_CLIENT_ID)
+    configFiles:
+      Debug: Config/Debug.xcconfig
+      Release: Config/Secrets.xcconfig
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ourmoney.app
+        PRODUCT_NAME: OurMoney
+        FULL_PRODUCT_NAME: OurMoney.app
+        WRAPPER_EXTENSION: app
+        SWIFT_VERSION: 5.10
+        TARGETED_DEVICE_FAMILY: "1,2"
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.finance
+        INFOPLIST_KEY_GEMINI_API_KEY: $(GEMINI_API_KEY)
+        # GOOGLE_CLIENT_ID / REVERSED_CLIENT_ID are intentionally NOT set here.
+        # They are injected from Config/Debug.xcconfig (local) or
+        # Config/Secrets.xcconfig (Release/CI) so real Firebase plist values win.
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_EMIT_LOC_STRINGS: YES
+      configs:
+        Debug:
+          base:
+            SWIFT_OPTIMIZATION_LEVEL: -Onone
+        Release:
+          base:
+            SWIFT_OPTIMIZATION_LEVEL: -O
+    dependencies:
+      - package: Firebase
+        product: FirebaseCore
+      - package: Firebase
+        product: FirebaseAuth
+      - package: Firebase
+        product: FirebaseFirestore
+      - package: Firebase
+        product: FirebaseFirestoreSwift
+      - package: GoogleSignIn
+        product: GoogleSignIn
+  OurMoneyTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: 17.0
+    sources:
+      - path: OurMoneyTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ourmoney.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 5.10
+    dependencies:
+      - target: OurMoney
+schemes:
+  OurMoney:
+    build:
+      targets:
+        OurMoney: all
+    test:
+      targets:
+        - OurMoneyTests
+    run:
+      config: Debug
+    archive:
+      config: Release
