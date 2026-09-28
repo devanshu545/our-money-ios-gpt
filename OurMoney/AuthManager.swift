@@ -10,12 +10,18 @@ import UIKit
 final class AuthManager: ObservableObject {
     enum State { case loading; case idle; case requiresName(uid: String); case requiresPairing(user: User, household: Household?, error: String?); case authenticated(user: User, household: Household, partner: User?); case error(String) }
     @Published private(set) var state: State = .loading
-    private let service = FirestoreService()
+    private let service: FirestoreService
     private var userCancellable: AnyCancellable?
     private var householdCancellable: AnyCancellable?
     private var authHandle: AuthStateDidChangeListenerHandle?
 
-    init() { configureFirebase() }
+    init() {
+        // Firebase must be configured before any Firestore reference is created;
+        // Firestore.firestore() throws otherwise. Property initializers run before
+        // init bodies, so service creation is deferred until after configuration.
+        configureFirebase()
+        self.service = FirestoreService()
+    }
     deinit { if let authHandle { Auth.auth().removeStateDidChangeListener(authHandle) } }
 
     private func configureFirebase() {

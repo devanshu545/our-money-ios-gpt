@@ -3,7 +3,9 @@ import Combine
 import FirebaseFirestore
 
 final class FirestoreService {
-    private let db = Firestore.firestore()
+    // Computed on first use: Firestore.firestore() requires FirebaseApp.configure()
+    // to have run; a stored property would capture it at instance creation time.
+    private var db: Firestore { Firestore.firestore() }
 
     func userDocument(_ uid: String) -> DocumentReference { db.collection("users").document(uid) }
     func householdDocument(_ id: String) -> DocumentReference { db.collection("households").document(id) }
