@@ -35,16 +35,22 @@ jobs:
 
       - name: Validate Firebase configuration
         run: |
+          set -o pipefail
           test -s OurMoney/GoogleService-Info.plist
           PLIST_BID=$(/usr/libexec/PlistBuddy -c 'Print :BUNDLE_ID' OurMoney/GoogleService-Info.plist)
           CLIENT_ID=$(/usr/libexec/PlistBuddy -c 'Print :CLIENT_ID' OurMoney/GoogleService-Info.plist)
+          REVERSED=$(/usr/libexec/PlistBuddy -c 'Print :REVERSED_CLIENT_ID' OurMoney/GoogleService-Info.plist)
           echo "Firebase plist BUNDLE_ID: $PLIST_BID"
           echo "CLIENT_ID present: $([ -n "$CLIENT_ID" ] && echo yes || echo no)"
+          echo "REVERSED_CLIENT_ID present: $([ -n "$REVERSED" ] && echo yes || echo no)"
           if [ "$PLIST_BID" != "com.ourmoney.app" ]; then
-            echo "::warning::GoogleService-Info.plist is registered for '$PLIST_BID', but the app bundle id is com.ourmoney.app. Firebase logs I-COR000008 and still initializes; register com.ourmoney.app in the Firebase project and replace the plist for a perfect match."
+            echo "::error::GoogleService-Info.plist is registered for '$PLIST_BID' but the app bundle id is com.ourmoney.app."
           fi
           if [ -z "$CLIENT_ID" ]; then
-            echo "::warning::CLIENT_ID empty in GoogleService-Info.plist; Google Sign-In cannot present the Google UI."
+            echo "::warning::CLIENT_ID empty in GoogleService-Info.plist; Google Sign-In cannot present the Google UI at runtime."
+          fi
+          if [ -z "$REVERSED" ]; then
+            echo "::warning::REVERSED_CLIENT_ID empty in GoogleService-Info.plist; the URL-scheme return route for Google Sign-In will be missing."
           fi
 
       - name: Generate Xcode project
@@ -103,16 +109,23 @@ jobs:
             xcrun xcresulttool get test-results tests --path "$XCR" 2>/dev/null | head -100 || true
           fi
 
-      - name: Archive (Release, iphoneos, unsigned)
+      - name: Resolve application product path from archive
+        id: apppath
         run: |
           set -o pipefail
-          xcodebuild -project OurMoney.xcodeproj -scheme OurMoney -configuration Release -sdk iphoneos \
-            -archivePath build/OurMoney.xcarchive \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO archive | xcbeautify
+          APP="build/OurMoney.xcarchive/Products/Applications/OurMoney.app"
+          if [ ! -d "$APP" ]; then
+            echo "::error::Expected app bundle not found at $APP"
+            echo "Archive Products/:"; find build/OurMoney.xcarchive/Products -maxdepth 3 -type d 2>/dev/null | head -50
+            exit 1
+          fi
+          echo "app_path=$APP" >> "$GITHUB_OUTPUT"
 
       - name: Verify archive contents
+        if: steps.apppath.outputs.app_path != ''
         run: |
-          APP="build/OurMoney.xcarchive/Products/Applications/OurMoney.app"
+          set -o pipefail
+          APP="${{ steps.apppath.outputs.app_path }}"
           test -d "$APP"
           test -f "$APP/Info.plist"
           BID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
@@ -125,14 +138,43 @@ jobs:
 
       - name: Package IPA
         run: |
+          set -o pipefail
+          APP="${{ steps.apppath.outputs.app_path }}"
           mkdir -p build/Payload
-          cp -R build/OurMoney.xcarchive/Products/Applications/OurMoney.app build/Payload/OurMoney.app
+          rm -rf build/Payload/OurMoney.app
+          cp -R "$APP" build/Payload/OurMoney.app
           cd build
+          rm -f OurMoney-unsigned.ipa
           zip -qry OurMoney-unsigned.ipa Payload
+          echo "=== IPA package summary ==="
+          echo "Bundle ID: com.ourmoney.app"
+          echo "IPA: build/OurMoney-unsigned.ipa"
           ls -lh OurMoney-unsigned.ipa
+          echo "=== IPA contents (top-level) ==="
+          unzip -l OurMoney-unsigned.ipa | sed -n '1,200p'
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload unsigned IPA artifact
+        if: always() && github.ref == 'refs/heads/main' && !cancelled()
+        uses: actions/upload-artifact@v4
         with:
           name: OurMoney-unsigned-IPA
           path: build/OurMoney-unsigned.ipa
           if-no-files-found: error
+          retention-days: 90
+
+      - name: Build report
+        if: always()
+        run: |
+          set -o pipefail
+          echo "## Build report"
+          echo "- branch: ${{ github.ref }}"
+          echo "- sha: ${{ github.sha }}"
+          echo "- runner: macos-latest"
+          if [ -f "build/OurMoney-unsigned.ipa" ]; then
+            echo "- archive: succeeded"
+            echo "- ipa: build/OurMoney-unsigned.ipa"
+            ls -lh build/OurMoney-unsigned.ipa
+            echo "- signed: false (explicitly unsigned; CODE_SIGNING_ALLOWED=NO)"
+          else
+            echo "- archive: failed or skipped (no IPA produced)"
+          fi

@@ -1,3 +1,5 @@
 build/
 OurMoney.xcodeproj/
 DerivedData/
+*.ipa
+artifacts/
